@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: flow-runtime-service
+  namespace: boomi-flow
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-name: "boomiflow2"
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "instance"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+    service.beta.kubernetes.io/aws-load-balancer-ip-address-type: "ipv4"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: "HTTP"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/api/health"
+  labels:
+    app: boomi-flow
+spec:
+  selector:
+    app: boomi-flow-runtime
+  type: LoadBalancer
+  ports:
+    - protocol: TCP
+      port: 2294
+      targetPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: boomi-flow-runtime
+  namespace: boomi-flow
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: boomi-flow-runtime
+  template:
+    metadata:
+      labels:
+        app: boomi-flow-runtime
+    spec:
+      containers:
+      - name: flow
+        image: boomi/flow:latest
+        env:
+        - name: BASE_URL
+          value: 'a1cbc08b8b37a448d93078e1e4bc0dc3-95411cfe9554ee7b.elb.us-east-1.amazonaws.com:2294'
+        - name: DATABASE_CONNECTION_STRING
+          value: 'Application Name={0};Database=boomi_flow;Host=<postgre-host-name>;Keepalive=300;Port=5432;Password=<password>;SSL Mode=Prefer;Trust Server Certificate=True;Username=<username>'
+        - name: INSTALLATION_TOKEN
+          value: '<install-token>'          
+        ports:
+        - containerPort: 80
+      restartPolicy: Always
+
+
