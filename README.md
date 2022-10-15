@@ -2,4 +2,4 @@
 
 
 
-![Boomi Flow Architecture Diagram](artifacts\flow-architecture-diagram.png)
+![Boomi Flow Architecture Diagram](artifacts/flow-architecture-diagram.png)
