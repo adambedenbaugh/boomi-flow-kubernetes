@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: boomi-flow-config
+  namespace: boomi-flow
+data:
+  boomi-flow-runtime-lb: '<load-balancer-for-boomi-flow>'
+  nginx.conf: |
+    include /etc/nginx/modules-enabled/*.conf;
+
+    events {
+      worker_connections  768;
+    }
+
+    http {
+      default_type       text/html;
+      #access_log         /;
+      sendfile           on;
+      keepalive_timeout  65;
+
+      proxy_cache_path   /tmp/ levels=1:2 keys_zone=s3_cache:10m max_size=500m
+                        inactive=60m use_temp_path=off;
+
+      server {
+        listen 80;
+
+        # Configure your domain name here:
+        server_name  compute-1.amazonaws.com;
+        access_log   /var/log/s3proxy.access.log  combined;
+
+        # Configure your Object Storage bucket URL here:
+        set $bucket "<aws-bucket-name>.amazonaws.com";
+
+        # This configuration provides direct access to the Object Storage bucket:
+        location /  {
+          rewrite ^/(.*) /$1 break;
+          resolver 1.1.1.1;
+          proxy_http_version     1.1;
+          proxy_redirect off;
+          proxy_set_header       Connection "";
+          proxy_set_header       Authorization '';
+          proxy_set_header       Host $bucket;
+          proxy_set_header       X-Real-IP $remote_addr;
+          proxy_set_header       X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_hide_header      x-amz-id-2;
+          proxy_hide_header      x-amz-request-id;
+          proxy_hide_header      x-amz-meta-server-side-encryption;
+          proxy_hide_header      x-amz-server-side-encryption;
+          proxy_hide_header      Set-Cookie;
+          proxy_ignore_headers   Set-Cookie;
+          proxy_intercept_errors on;
+          add_header             Cache-Control max-age=31536000;
+          proxy_pass             http://$bucket;
+        }
+
+        # This configuration uses a 60 minute cache for files requested. It is not required.
+        location /s3_cached/ {
+          resolver 62.210.16.6;
+          proxy_cache            s3_cache;
+          proxy_http_version     1.1;
+          proxy_redirect off;
+          proxy_set_header       Connection "";
+          proxy_set_header       Authorization '';
+          proxy_set_header       Host $bucket;
+          proxy_set_header       X-Real-IP $remote_addr;
+          proxy_set_header       X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_hide_header      x-amz-id-2;
+          proxy_hide_header      x-amz-request-id;
+          proxy_hide_header      x-amz-meta-server-side-encryption;
+          proxy_hide_header      x-amz-server-side-encryption;
+          proxy_hide_header      Set-Cookie;
+          proxy_ignore_headers   Set-Cookie;
+          proxy_cache_revalidate on;
+          proxy_intercept_errors on;
+          proxy_cache_use_stale  error timeout updating http_500 http_502 http_503 http_504;
+          proxy_cache_lock       on;
+          proxy_cache_valid      200 304 60m;
+          add_header             Cache-Control max-age=31536000;
+          add_header             X-Cache-Status $upstream_cache_status;
+          proxy_pass             https://$bucket/;
+        }
+
+        location /health {
+          return 200 "health";
+        }
+      }
+    } 
